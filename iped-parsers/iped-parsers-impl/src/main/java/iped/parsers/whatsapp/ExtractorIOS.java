@@ -277,6 +277,7 @@ public abstract class ExtractorIOS extends Extractor {
                 }
                 extractMessages(conn, idToChat, firstTry, false);
                 extractMessages(conn, idToChat, firstTry, true);
+                readMessageCounters(conn, idToChat);
 
                 for (Chat c : list) {
                     HashMap<String, Message> messagesMap = new HashMap<String, Message>();
@@ -336,6 +337,39 @@ public abstract class ExtractorIOS extends Extractor {
         } while (tryAgain);
 
         return cleanChatList(list);
+    }
+
+    /**
+     * Reads the message counter of each chat session, which WhatsApp does not
+     * decrement when messages are deleted, and the number of messages still
+     * stored for it. Errors are only logged, as this is complementary data.
+     */
+    private void readMessageCounters(Connection conn, Map<Long, Chat> idToChat) {
+        try {
+            if (!SQLite3DBParser.checkIfColumnExists(conn, "ZWACHATSESSION", "ZMESSAGECOUNTER")) {
+                return;
+            }
+            Map<Long, Integer> storedCounts = new HashMap<>();
+            try (Statement stmt = conn.createStatement();
+                    ResultSet rs = stmt.executeQuery(SELECT_STORED_MESSAGES_COUNT)) {
+                while (rs.next()) {
+                    storedCounts.put(rs.getLong("id"), rs.getInt("total"));
+                }
+            }
+            try (Statement stmt = conn.createStatement();
+                    ResultSet rs = stmt.executeQuery(SELECT_CHAT_MESSAGE_COUNTERS)) {
+                while (rs.next()) {
+                    Chat c = idToChat.get(rs.getLong("id"));
+                    int counter = rs.getInt("counter");
+                    if (c != null && !rs.wasNull()) {
+                        c.setMessageCounter(counter);
+                        c.setStoredMessagesCount(storedCounts.getOrDefault(c.getId(), 0));
+                    }
+                }
+            }
+        } catch (SQLException e) {
+            logger.warn("Error reading chat message counters from " + itemPath + ": " + e);
+        }
     }
 
     private void extractMessages(Connection conn, Map<Long, Chat> idToChat, boolean firstTry, boolean isGroupChat)
@@ -1847,6 +1881,12 @@ public abstract class ExtractorIOS extends Extractor {
             + "FROM ZWACHATSESSION "
             + "LEFT JOIN ZWAPROFILEPICTUREITEM ON ZWAPROFILEPICTUREITEM.ZJID = ZWACHATSESSION.ZCONTACTJID "
             + "ORDER BY ZLASTMESSAGEDATE DESC";
+
+    private static final String SELECT_CHAT_MESSAGE_COUNTERS = "SELECT Z_PK as id, ZMESSAGECOUNTER as counter "
+            + "FROM ZWACHATSESSION";
+
+    private static final String SELECT_STORED_MESSAGES_COUNT = "SELECT ZCHATSESSION as id, COUNT(*) as total "
+            + "FROM ZWAMESSAGE GROUP BY ZCHATSESSION";
 
     private static final String SELECT_CHAT_LIST_NO_PPIC = "SELECT ZWACHATSESSION.Z_PK as id, ZCONTACTJID AS contact, "
             + "ZPARTNERNAME as subject, ZLASTMESSAGEDATE, NULL as avatarPath, 0 as ZREMOVED, NULL AS identifier "

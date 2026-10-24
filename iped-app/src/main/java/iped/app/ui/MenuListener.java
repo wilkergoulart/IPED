@@ -51,6 +51,7 @@ import iped.app.ui.TreeViewModel.Node;
 import iped.app.ui.columns.ColumnsManager;
 import iped.app.ui.columns.ColumnsManagerUI;
 import iped.app.ui.columns.ColumnsSelectUI;
+import iped.app.ui.insights.AnalystInsightsReport;
 import iped.app.ui.utils.UiIconSize;
 import iped.app.ui.utils.UiScale;
 import iped.data.IIPEDSource;
@@ -456,6 +457,9 @@ public class MenuListener implements ActionListener {
 
         } else if (e.getSource() == menu.createReport) {
             new ReportDialog().setVisible();
+
+        } else if (e.getSource() == menu.analystInsights) {
+            new AnalystInsightsReport().generate();
 
         } else if (e.getSource() == menu.lastColLayout) {
             ColumnsManagerUI.getInstance().resetToLastLayout();

@@ -57,6 +57,19 @@ public class ExtraProperties {
 
     public static final Property CONVERSATION_MESSAGES_COUNT = Property.internalInteger(CONVERSATION_PREFIX + "messagesCount");
 
+    /**
+     * Message counter kept by the chat application for a conversation. Unlike
+     * {@link #CONVERSATION_STORED_MESSAGES_COUNT}, it is not decremented when
+     * messages are deleted (e.g. ZMESSAGECOUNTER of WhatsApp iOS ZWACHATSESSION).
+     */
+    public static final Property CONVERSATION_MESSAGE_COUNTER = Property.internalInteger(CONVERSATION_PREFIX + "messageCounter");
+
+    /**
+     * Number of messages of a conversation still stored in the application
+     * database (not counting recovered deleted records).
+     */
+    public static final Property CONVERSATION_STORED_MESSAGES_COUNT = Property.internalInteger(CONVERSATION_PREFIX + "storedMessagesCount");
+
     public static final String CONVERSATION_SUFFIX_ID = ":id";
     public static final String CONVERSATION_SUFFIX_NAME = ":name";
     public static final String CONVERSATION_SUFFIX_PHONE = ":phoneNumber";

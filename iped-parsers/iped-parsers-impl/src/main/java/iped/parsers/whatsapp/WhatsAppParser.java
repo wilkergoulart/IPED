@@ -335,6 +335,12 @@ public class WhatsAppParser extends SQLite3DBParser {
                 if (c.isDeleted()) {
                     chatMetadata.set(ExtraProperties.DELETED, Boolean.TRUE.toString());
                 }
+                if (c.getMessageCounter() != null) {
+                    chatMetadata.set(ExtraProperties.CONVERSATION_MESSAGE_COUNTER, c.getMessageCounter());
+                }
+                if (c.getStoredMessagesCount() != null) {
+                    chatMetadata.set(ExtraProperties.CONVERSATION_STORED_MESSAGES_COUNT, c.getStoredMessagesCount());
+                }
 
                 if (extractMessages && msgSubset.size() > 0) {
                     chatMetadata.set(BasicProps.HASCHILD, Boolean.TRUE.toString());

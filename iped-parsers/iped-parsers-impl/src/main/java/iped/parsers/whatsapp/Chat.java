@@ -23,6 +23,9 @@ public class Chat {
 
     private String recoveredFrom;
 
+    private Integer messageCounter;
+    private Integer storedMessagesCount;
+
     private Set<WAContact> groupMembers = new HashSet<>();
 
     public Chat(WAContact remote) {
@@ -170,5 +173,29 @@ public class Chat {
 
     public boolean isDeleted() {
         return isDeleted;
+    }
+
+    /**
+     * @return the message counter kept by WhatsApp for this chat, which is not
+     *         decremented when messages are deleted, or null if not available
+     */
+    public Integer getMessageCounter() {
+        return messageCounter;
+    }
+
+    public void setMessageCounter(Integer messageCounter) {
+        this.messageCounter = messageCounter;
+    }
+
+    /**
+     * @return the number of messages of this chat still stored in the database,
+     *         or null if not available
+     */
+    public Integer getStoredMessagesCount() {
+        return storedMessagesCount;
+    }
+
+    public void setStoredMessagesCount(Integer storedMessagesCount) {
+        this.storedMessagesCount = storedMessagesCount;
     }
 }
