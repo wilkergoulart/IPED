@@ -57,8 +57,12 @@ public class AnalystInsightsReport extends CancelableWorker<File, Void> implemen
             + "\" AND NOT " + BasicProps.CONTENTTYPE + ":(\"" + WhatsAppParser.WHATSAPP_ACCOUNT + "\" OR \""
             + WhatsAppParser.WHATSAPP_CONTACT + "\" OR \"" + WhatsAppParser.WHATSAPP_CALL + "\")";
 
+    // the chat item is a subtype of text/html, so its non general metadata keys get
+    // the html: prefix in the index
+    private static final String CHAT_ID = ExtraProperties.HTML_META_PREFIX + "chatId";
+
     private static final Set<String> CHAT_FIELDS = Set.of(BasicProps.NAME, BasicProps.PATH, BasicProps.PARENTID,
-            "chatId", ExtraProperties.CONVERSATION_MESSAGE_COUNTER.getName(),
+            CHAT_ID, ExtraProperties.CONVERSATION_MESSAGE_COUNTER.getName(),
             ExtraProperties.CONVERSATION_STORED_MESSAGES_COUNT.getName(), ExtraProperties.CONVERSATION_SEQUENCE_GAPS);
 
     private static final Set<String> MESSAGE_FIELDS = Set.of(ExtraProperties.COMMUNICATION_FROM,
@@ -112,7 +116,7 @@ public class AnalystInsightsReport extends CancelableWorker<File, Void> implemen
             String database = path != null && path.contains("/") ? path.substring(0, path.lastIndexOf('/')) : path;
             // long chats are split in fragments named "<chat name>_<n>"
             String chatName = name != null ? FRAGMENT_SUFFIX.matcher(name).replaceFirst("") : null;
-            String key = itemId.getSourceId() + "/" + doc.get(BasicProps.PARENTID) + "/" + doc.get("chatId") + "/"
+            String key = itemId.getSourceId() + "/" + doc.get(BasicProps.PARENTID) + "/" + doc.get(CHAT_ID) + "/"
                     + chatName;
             whatsApp.addChat(key, chatName, database,
                     getInt(doc, ExtraProperties.CONVERSATION_MESSAGE_COUNTER.getName()),
