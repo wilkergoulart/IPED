@@ -280,6 +280,7 @@ public class TiffViewer extends ImageViewer {
 
     @Override
     public void dispose() {
+        executor.shutdown();
     }
 
     public synchronized void actionPerformed(ActionEvent e) {

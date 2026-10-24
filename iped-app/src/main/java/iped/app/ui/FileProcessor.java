@@ -172,15 +172,7 @@ public class FileProcessor extends CancelableWorker<Void, Void> implements IFile
 
         waitEvidenceOpening(item);
 
-        Set<String> highlights = new HashSet<>();
-        highlights.addAll(App.get().getHighlightTerms());
-
-        if (App.get().similarFacesRefItem != null) {
-            List<String> locations = SimilarFacesSearch.getMatchLocations(App.get().similarFacesRefItem, item);
-            for (String location : locations) {
-                highlights.add(ImageViewer.HIGHLIGHT_LOCATION + location);
-            }
-        }
+        Set<String> highlights = getHighlightTerms(item);
 
         App.get().getViewerController().loadFile(item, viewItem, contentType, highlights);
 
@@ -199,7 +191,24 @@ public class FileProcessor extends CancelableWorker<Void, Void> implements IFile
         }
     }
 
-    private void waitEvidenceOpening(final IItem item) throws InterruptedException {
+    /**
+     * @return the current search terms and similar faces locations to highlight in
+     *         the viewers
+     */
+    static Set<String> getHighlightTerms(IItem item) {
+        Set<String> highlights = new HashSet<>();
+        highlights.addAll(App.get().getHighlightTerms());
+
+        if (App.get().similarFacesRefItem != null) {
+            List<String> locations = SimilarFacesSearch.getMatchLocations(App.get().similarFacesRefItem, item);
+            for (String location : locations) {
+                highlights.add(ImageViewer.HIGHLIGHT_LOCATION + location);
+            }
+        }
+        return highlights;
+    }
+
+    static void waitEvidenceOpening(final IItem item) throws InterruptedException {
         ISeekableInputStreamFactory factory = item.getInputStreamFactory();
         if (!(factory instanceof SleuthkitInputStreamFactory) && !(factory instanceof ZIPInputStreamFactory) && !(factory instanceof AD1InputStreamFactory)) {
             return;
@@ -222,7 +231,7 @@ public class FileProcessor extends CancelableWorker<Void, Void> implements IFile
         }
     }
 
-    private void setWaitVisible(final boolean visible) {
+    private static void setWaitVisible(final boolean visible) {
         try {
             SwingUtilities.invokeLater(new Runnable() {
                 @Override

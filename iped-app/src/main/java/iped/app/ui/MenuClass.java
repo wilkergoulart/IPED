@@ -29,6 +29,7 @@ import javax.swing.JMenuItem;
 import javax.swing.JPopupMenu;
 import javax.swing.JRadioButtonMenuItem;
 import javax.swing.KeyStroke;
+import javax.swing.tree.TreePath;
 
 import iped.app.ui.themes.Theme;
 import iped.app.ui.themes.ThemeManager;
@@ -50,7 +51,7 @@ public class MenuClass extends JPopupMenu {
             checkHighlightedAndSubItems, uncheckHighlightedAndSubItems, checkHighlightedAndParent, uncheckHighlightedAndParent, checkHighlightedAndReferences, uncheckHighlightedAndReferences, checkHighlightedAndReferencedBy, uncheckHighlightedAndReferencedBy,
             changeGalleryColCount, defaultLayout, changeLayout, previewScreenshot, manageBookmarks, clearSearchHistory, importKeywords, navigateToParent, exportTerms, manageFilters, manageColumns, exportCheckedToZip, exportCheckedTreeToZip,
             exportTree, exportTreeChecked, similarDocs, openViewfile, createReport, openBfacClient, resetColLayout, lastColLayout, saveColLayout, addToGraph, navigateToParentChat, pinFirstColumns, similarImagesCurrent, similarImagesExternal,
-            similarFacesCurrent, similarFacesExternal, toggleTimelineView, uiZoom, catIconSize, savePanelsLayout, loadPanelsLayout;
+            similarFacesCurrent, similarFacesExternal, toggleTimelineView, uiZoom, catIconSize, savePanelsLayout, loadPanelsLayout, pinPreview;
 
     MenuListener menuListener = new MenuListener(this);
     boolean isTreeMenu;
@@ -61,6 +62,25 @@ public class MenuClass extends JPopupMenu {
         super();
         this.isTreeMenu = isTreeMenu;
         addExportTreeMenuItems(this);
+
+        this.addSeparator();
+
+        pinPreview = new JMenuItem(Messages.getString("MenuClass.PinPreview")); //$NON-NLS-1$
+        pinPreview.addActionListener(menuListener);
+        TreePath[] paths = App.get().tree.getSelectionPaths();
+        pinPreview.setEnabled(paths != null && paths.length == 1 && paths[0].getPathCount() > 2);
+        this.add(pinPreview);
+    }
+
+    /**
+     * @return true if the item is a chat message whose parent chat can be shown
+     *         scrolled to it
+     */
+    static boolean isChatMessage(IItem item) {
+        return MediaTypes.isInstanceOf(item.getMediaType(), MediaTypes.CHAT_MESSAGE_MIME)
+                || MediaTypes.UFED_MESSAGE_MIME.equals(item.getMediaType())
+                || (VCardParser.VCARD_MIME.equals(item.getMediaType()) && item.getMetadata().get(ExtraProperties.COMMUNICATION_FROM) != null
+                        && item.getMetadata().get(ExtraProperties.COMMUNICATION_TO) != null);
     }
 
     public MenuClass(IItem item) {
@@ -274,13 +294,7 @@ public class MenuClass extends JPopupMenu {
 
         navigateToParentChat = new JMenuItem(Messages.getString("MenuClass.GoToChat")); //$NON-NLS-1$
         navigateToParentChat.addActionListener(menuListener);
-        boolean enableGoToChat = false;
-        if (item != null) {
-            enableGoToChat = MediaTypes.isInstanceOf(item.getMediaType(), MediaTypes.CHAT_MESSAGE_MIME)
-                    || MediaTypes.UFED_MESSAGE_MIME.equals(item.getMediaType())
-                    || (VCardParser.VCARD_MIME.equals(item.getMediaType()) && item.getMetadata().get(ExtraProperties.COMMUNICATION_FROM) != null && item.getMetadata().get(ExtraProperties.COMMUNICATION_TO) != null);
-        }
-        navigateToParentChat.setEnabled(enableGoToChat);
+        navigateToParentChat.setEnabled(item != null && isChatMessage(item));
         this.add(navigateToParentChat);
 
         this.addSeparator();
@@ -325,6 +339,11 @@ public class MenuClass extends JPopupMenu {
         openViewfile.addActionListener(menuListener);
         openViewfile.setEnabled(item != null && (item.getViewFile() != null || item.hasPreview()));
         this.add(openViewfile);
+
+        pinPreview = new JMenuItem(Messages.getString("MenuClass.PinPreview")); //$NON-NLS-1$
+        pinPreview.addActionListener(menuListener);
+        pinPreview.setEnabled(item != null);
+        this.add(pinPreview);
 
         this.addSeparator();
         addToGraph = new JMenuItem(Messages.getString("MenuClass.AddToGraph")); //$NON-NLS-1$

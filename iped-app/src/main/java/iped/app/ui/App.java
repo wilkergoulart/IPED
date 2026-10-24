@@ -441,6 +441,7 @@ public class App extends JFrame implements WindowListener, IMultiSearchResultPro
     private void destroy() {
         boolean processingFinished = processingManager == null || processingManager.isProcessingFinished();
         try {
+            PinnedPreviewWindow.closeAll();
             if (viewerController != null) {
                 viewerController.dispose();
             }
@@ -922,6 +923,7 @@ public class App extends JFrame implements WindowListener, IMultiSearchResultPro
         galleryBlurButton.setSelected(enableBlur);
         gallery.repaint();
         viewerController.getMultiViewer().setBlurFilter(enableBlur);
+        PinnedPreviewWindow.setBlurFilterAll(enableBlur);
     }
 
     protected void toggleGlobalGrayScale() {
@@ -930,6 +932,7 @@ public class App extends JFrame implements WindowListener, IMultiSearchResultPro
         galleryGrayButton.setSelected(enableGray);
         gallery.repaint();
         viewerController.getMultiViewer().setGrayFilter(enableGray);
+        PinnedPreviewWindow.setGrayFilterAll(enableGray);
     }
 
     public void updateUI(boolean refresh) {

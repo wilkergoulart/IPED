@@ -27,6 +27,7 @@ import javax.swing.UnsupportedLookAndFeelException;
 import bibliothek.extension.gui.dock.theme.EclipseTheme;
 import bibliothek.extension.gui.dock.theme.eclipse.EclipseColorScheme;
 import iped.app.ui.App;
+import iped.app.ui.PinnedPreviewWindow;
 
 public class ThemeManager {
     private static final ThemeManager instance = new ThemeManager();
@@ -96,6 +97,7 @@ public class ThemeManager {
                 } catch (UnsupportedLookAndFeelException e) {
                 }
                 updateUI(App.get());
+                PinnedPreviewWindow.updateUIAll();
                 App.get().dockingControl.putProperty(EclipseTheme.ECLIPSE_COLOR_SCHEME, new EclipseColorScheme() {
                     @Override
                     public void updateUI() {

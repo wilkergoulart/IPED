@@ -442,6 +442,21 @@ public class MenuListener implements ActionListener {
                 }
             }
 
+        } else if (e.getSource() == menu.pinPreview) {
+            List<Integer> luceneIds = new ArrayList<>();
+            if (menu.isTreeMenu) {
+                TreePath[] paths = App.get().tree.getSelectionPaths();
+                if (paths != null && paths.length == 1) {
+                    luceneIds.add(((Node) paths[0].getLastPathComponent()).docId);
+                }
+            } else {
+                for (int selIdx : App.get().resultsTable.getSelectedRows()) {
+                    IItemId itemId = App.get().ipedResult.getItem(App.get().resultsTable.convertRowIndexToModel(selIdx));
+                    luceneIds.add(App.get().appCase.getLuceneId(itemId));
+                }
+            }
+            PinnedPreviewWindow.open(luceneIds);
+
         } else if (e.getSource() == menu.openBfacClient) {
             // Check if BFAC Client is enabled before opening dialog
             BFACClientConfig bfacClientConfig = ConfigurationManager.get().findObject(BFACClientConfig.class);

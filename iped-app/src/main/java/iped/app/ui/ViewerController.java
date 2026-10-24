@@ -80,6 +80,8 @@ public class ViewerController {
     private Tika tika;
     private boolean init;
     private boolean isFixed;
+    private volatile boolean enableHighlightFacesButton;
+    private volatile boolean enableAgeEstimationCombo;
     private final Object lock = new Object();
 
     public ViewerController() {
@@ -102,19 +104,9 @@ public class ViewerController {
         viewers.add(viewersRepository = new MultiViewer());
 
         // These are content-specific viewers (inside a single ViewersRepository)
-        viewersRepository.addViewer(new ImageViewer());
-        viewersRepository.addViewer(new CADViewer());
-        viewersRepository.addViewer(new HtmlViewer());
-        viewersRepository.addViewer(new EmailViewer(new AttachmentSearcherImpl()));
-        viewersRepository.addViewer(new MsgViewer());
-        linkViewer = new HtmlLinkViewer(new AttachmentSearcherImpl());
-        viewersRepository.addViewer(linkViewer);
-        viewersRepository.addViewer(new IcePDFViewer());
-        viewersRepository.addViewer(new TiffViewer());
-        viewersRepository.addViewer(new AudioViewer(new AttachmentSearcherImpl()));
-        viewersRepository.addViewer(new ReferencedFileViewer(viewersRepository, new AttachmentSearcherImpl(), () -> {
+        linkViewer = addPreviewViewers(viewersRepository, () -> {
             changeToViewer(metadataViewer);
-        }));
+        });
 
         new Thread() {
             public void run() {
@@ -155,6 +147,30 @@ public class ViewerController {
                 }
             }
         }.start();
+    }
+
+    /**
+     * Adds the content-specific preview viewers to a MultiViewer. The order matters,
+     * as the last viewer supporting a type is used. LibreOfficeViewer is not added
+     * here, as it does not support more than one instance.
+     * 
+     * @param actionIfReferenceNotLoaded
+     *            called when a referenced file can not be shown
+     * @return the viewer used for chats
+     */
+    public static HtmlLinkViewer addPreviewViewers(MultiViewer target, Runnable actionIfReferenceNotLoaded) {
+        target.addViewer(new ImageViewer());
+        target.addViewer(new CADViewer());
+        target.addViewer(new HtmlViewer());
+        target.addViewer(new EmailViewer(new AttachmentSearcherImpl()));
+        target.addViewer(new MsgViewer());
+        HtmlLinkViewer htmlLinkViewer = new HtmlLinkViewer(new AttachmentSearcherImpl());
+        target.addViewer(htmlLinkViewer);
+        target.addViewer(new IcePDFViewer());
+        target.addViewer(new TiffViewer());
+        target.addViewer(new AudioViewer(new AttachmentSearcherImpl()));
+        target.addViewer(new ReferencedFileViewer(target, new AttachmentSearcherImpl(), actionIfReferenceNotLoaded));
+        return htmlLinkViewer;
     }
 
     public void setFixed(boolean isFixed) {
@@ -358,20 +374,25 @@ public class ViewerController {
     private void updateViewType() {
         if (viewType != null)
             return;
+        if (tika == null) {
+            tika = new Tika();
+        }
+        viewType = detectViewType(tika, file, viewFile, contentType);
+    }
+
+    /**
+     * @return the type of the view file, which may differ from the item content
+     *         type (e.g. a preview of a chat)
+     */
+    public static String detectViewType(Tika tika, IStreamSource file, IStreamSource viewFile, String contentType) {
         if (!file.equals(viewFile)) {
-            try {
-                if (tika == null) {
-                    tika = new Tika();
-                }
-                try (TikaInputStream stream = TikaInputStream.get(viewFile.getSeekableInputStream())) {
-                    viewType = tika.detect(stream);
-                }
-                return;
+            try (TikaInputStream stream = TikaInputStream.get(viewFile.getSeekableInputStream())) {
+                return tika.detect(stream);
             } catch (IOException e) {
                 e.printStackTrace();
             }
         }
-        viewType = contentType;
+        return contentType;
     }
 
     private AbstractViewer getBestViewer(String contentType) {
@@ -397,7 +418,7 @@ public class ViewerController {
                 .map(e -> e.isEnabled())
                 .orElse(false);
         boolean hasFaceRecognitionInIndex = App.get().appCase.getLeafReader().getFieldInfos().fieldInfo(ExtraProperties.FACE_COUNT) != null;
-        boolean enableHighlightFacesButton = faceRecognitionEnabled || hasFaceRecognitionInIndex;
+        enableHighlightFacesButton = faceRecognitionEnabled || hasFaceRecognitionInIndex;
 
         boolean ageEstimationEnabled = Optional
                 .ofNullable(ConfigurationManager.get())
@@ -405,9 +426,17 @@ public class ViewerController {
                 .map(e -> e.isEnabled())
                 .orElse(false);
         boolean hasAgeEstimationInIndex = App.get().appCase.getLeafReader().getFieldInfos().fieldInfo(ExtraProperties.FACE_AGE_LABELS) != null;
-        boolean enableAgeEstimationCombo = ageEstimationEnabled || hasAgeEstimationInIndex;
+        enableAgeEstimationCombo = ageEstimationEnabled || hasAgeEstimationInIndex;
 
-        viewersRepository
+        configureImageViewers(viewersRepository);
+    }
+
+    /**
+     * Enables the face and age buttons of the image viewers of a MultiViewer, as in
+     * the main preview.
+     */
+    public void configureImageViewers(MultiViewer multiViewer) {
+        multiViewer
                 .getViewerList()
                 .stream()
                 .filter(ImageViewer.class::isInstance)

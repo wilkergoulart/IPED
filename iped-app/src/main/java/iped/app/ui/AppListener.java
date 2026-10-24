@@ -182,6 +182,8 @@ public class AppListener implements ActionListener, MouseListener {
         }
 
         if (evt.getSource() == App.get().updateCaseData) {
+            // pinned previews hold items and bookmarks of the case being reloaded
+            PinnedPreviewWindow.closeAll();
             UICaseDataLoader init = new UICaseDataLoader(App.get().getProcessingManager(), true);
             init.execute();
         }

@@ -105,7 +105,7 @@ public class ImageViewer extends AbstractViewer implements ActionListener {
     private static final Color rectColorBack = new Color(255,255,255,50);
 
     private static final String[] ageOptions = { AGE_OPTION_CHILD, AGE_OPTION_TEENAGER, AGE_OPTION_ADULT, AGE_OPTION_MIDDLE_AGE, AGE_OPTION_AGED };
-    private static final Set<String> selectedAges = new HashSet<>();
+    private final Set<String> selectedAges = new HashSet<>();
     private static final Map<String, Color> ageRectangleColors = new HashMap<>();
     static {
         ageRectangleColors.put(AGE_OPTION_CHILD, new Color(255, 153, 204)); // Rose Pink

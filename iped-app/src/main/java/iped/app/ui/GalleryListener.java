@@ -81,7 +81,10 @@ public class GalleryListener implements ListSelectionListener, MouseListener, Ke
 
     @Override
     public void mousePressed(MouseEvent evt) {
-
+        // needed for Linux, where the context menu is triggered on mouse press
+        if (evt.isPopupTrigger()) {
+            App.get().resultTableListener.mousePressed(evt);
+        }
     }
 
     @Override

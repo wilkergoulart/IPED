@@ -45,6 +45,7 @@ public class IcePDFViewer extends AbstractViewer {
 
     private final Object lock = new Object();
     private volatile IStreamSource lastContent;
+    private volatile boolean shutdownThreadPoolOnLoad = true;
 
     @Override
     public boolean isSupportedType(String contentType) {
@@ -54,6 +55,16 @@ public class IcePDFViewer extends AbstractViewer {
     @Override
     public String getName() {
         return "Pdf"; //$NON-NLS-1$
+    }
+
+    /**
+     * @param shutdownThreadPoolOnLoad
+     *            if the static IcePDF thread pool is shut down before loading a
+     *            document, which stops the rendering of documents shown in other
+     *            viewer instances
+     */
+    public void setShutdownThreadPoolOnLoad(boolean shutdownThreadPoolOnLoad) {
+        this.shutdownThreadPoolOnLoad = shutdownThreadPoolOnLoad;
     }
 
     public IcePDFViewer() {
@@ -194,9 +205,11 @@ public class IcePDFViewer extends AbstractViewer {
         }
 
         // some docs hang and block loading new docs
-        try {
-            Library.shutdownThreadPool();
-        } catch (Exception e) {
+        if (shutdownThreadPoolOnLoad) {
+            try {
+                Library.shutdownThreadPool();
+            } catch (Exception e) {
+            }
         }
 
         new Thread() {
