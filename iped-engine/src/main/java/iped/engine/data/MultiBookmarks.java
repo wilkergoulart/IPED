@@ -13,7 +13,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
-import java.util.concurrent.CopyOnWriteArrayList;
 
 import javax.swing.KeyStroke;
 
@@ -35,8 +34,7 @@ public class MultiBookmarks implements Serializable, IMultiBookmarks {
      */
     private static final long serialVersionUID = 1L;
 
-    // listeners are notified from the EDT and from the JavaFX thread
-    private transient List<SelectionListener> selectionListeners = new CopyOnWriteArrayList<>();
+    private transient List<SelectionListener> selectionListeners = new ArrayList<>();
 
     Map<Integer, IBookmarks> map = new HashMap<Integer, IBookmarks>();
 

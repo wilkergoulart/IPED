@@ -103,6 +103,14 @@ public class EmailViewer extends HtmlLinkViewer {
     }
 
     @Override
+    public void dispose() {
+        if (mch != null) {
+            mch.deleteFiles();
+        }
+        super.dispose();
+    }
+
+    @Override
     public void loadFile(IStreamSource content, Set<String> highlightTerms) {
 
         if (content == null) {

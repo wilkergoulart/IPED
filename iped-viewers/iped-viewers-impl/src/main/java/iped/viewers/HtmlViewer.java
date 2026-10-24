@@ -123,16 +123,15 @@ public class HtmlViewer extends AbstractViewer {
     @Override
     public void loadFile(final IStreamSource content, final Set<String> terms) {
 
-        if (tmpFile != null) {
-            tmpFile.delete();
-        }
-
         Platform.runLater(new Runnable() {
             @Override
             public void run() {
                 scrollToPositionDone = false;
                 webEngine.load(null);
                 webEngine.loadContent(UiUtil.getUIEmptyHtml());
+
+                // deleted here, as the file is created by a previous runnable
+                deleteTempFile();
 
                 if (content != null) {
                     try {
@@ -519,7 +518,15 @@ public class HtmlViewer extends AbstractViewer {
 
     @Override
     public void dispose() {
+        deleteTempFile();
+    }
 
+    private void deleteTempFile() {
+        File file = tmpFile;
+        if (file != null) {
+            file.delete();
+            tmpFile = null;
+        }
     }
 
     @Override

@@ -7,6 +7,7 @@ import java.awt.Toolkit;
 import java.awt.datatransfer.Clipboard;
 import java.io.File;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.Set;
 
 import javax.swing.JLabel;
@@ -45,7 +46,9 @@ public class IcePDFViewer extends AbstractViewer {
 
     private final Object lock = new Object();
     private volatile IStreamSource lastContent;
-    private volatile boolean shutdownThreadPoolOnLoad = true;
+
+    // viewers with an open document, all using the static IcePDF thread pools
+    private static final Set<IcePDFViewer> viewersWithDocument = new HashSet<>();
 
     @Override
     public boolean isSupportedType(String contentType) {
@@ -55,16 +58,6 @@ public class IcePDFViewer extends AbstractViewer {
     @Override
     public String getName() {
         return "Pdf"; //$NON-NLS-1$
-    }
-
-    /**
-     * @param shutdownThreadPoolOnLoad
-     *            if the static IcePDF thread pool is shut down before loading a
-     *            document, which stops the rendering of documents shown in other
-     *            viewer instances
-     */
-    public void setShutdownThreadPoolOnLoad(boolean shutdownThreadPoolOnLoad) {
-        this.shutdownThreadPoolOnLoad = shutdownThreadPoolOnLoad;
     }
 
     public IcePDFViewer() {
@@ -186,10 +179,30 @@ public class IcePDFViewer extends AbstractViewer {
 
     @Override
     public void dispose() {
+        setHasDocument(false);
         if (pdfController != null) {
             pdfController.dispose();
         }
 
+    }
+
+    private void setHasDocument(boolean hasDocument) {
+        synchronized (viewersWithDocument) {
+            if (hasDocument) {
+                viewersWithDocument.add(this);
+            } else {
+                viewersWithDocument.remove(this);
+            }
+        }
+    }
+
+    /**
+     * Waits for a document being opened in background, e.g. before releasing the
+     * file it was opened from.
+     */
+    public void waitPendingLoad() {
+        synchronized (lock) {
+        }
     }
 
     @Override
@@ -198,17 +211,22 @@ public class IcePDFViewer extends AbstractViewer {
         lastContent = content;
 
         if (content == null) {
+            setHasDocument(false);
             pdfController.closeDocument();
             labelMsg.setVisible(false);
             viewerPanel.setVisible(false);
             return;
         }
 
-        // some docs hang and block loading new docs
-        if (shutdownThreadPoolOnLoad) {
-            try {
-                Library.shutdownThreadPool();
-            } catch (Exception e) {
+        // some docs hang and block loading new docs. The thread pools are static, so
+        // they are not shut down while other viewer instances show a document.
+        synchronized (viewersWithDocument) {
+            viewersWithDocument.remove(this);
+            if (viewersWithDocument.isEmpty()) {
+                try {
+                    Library.shutdownThreadPool();
+                } catch (Exception e) {
+                }
             }
         }
 
@@ -224,8 +242,12 @@ public class IcePDFViewer extends AbstractViewer {
 
                     try {
                         pdfController.openDocument(content.getTempFile().getAbsolutePath());
-                        if (!content.equals(lastContent))
+                        if (!content.equals(lastContent)) {
+                            // another file or none was requested meanwhile
+                            pdfController.closeDocument();
                             return;
+                        }
+                        setHasDocument(true);
 
                         if (!isDocumentValid()) {
                             labelMsg.setVisible(true);

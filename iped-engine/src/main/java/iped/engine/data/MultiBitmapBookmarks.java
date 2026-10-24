@@ -15,6 +15,7 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.stream.Collectors;
 
 import javax.swing.KeyStroke;
@@ -41,7 +42,9 @@ public class MultiBitmapBookmarks implements Serializable, IMultiBookmarks {
     // cache made of soft reference to bookmarks hashcodes
     private transient HashMap<String, SoftReference<RoaringBitmap[]>> bsetCache = new HashMap<>();
     private transient SoftReference<RoaringBitmap[]> unionsCache = new SoftReference<RoaringBitmap[]>(null);
-    private transient List<SelectionListener> selectionListeners = new ArrayList<>();
+    // listeners are notified from the EDT and from the JavaFX thread, and added or
+    // removed by pinned preview windows from their loader threads
+    private transient List<SelectionListener> selectionListeners = new CopyOnWriteArrayList<>();
 
     Map<Integer, IBookmarks> map = new HashMap<Integer, IBookmarks>();
 

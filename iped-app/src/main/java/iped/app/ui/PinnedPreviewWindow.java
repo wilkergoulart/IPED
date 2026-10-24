@@ -8,6 +8,7 @@ import java.awt.Rectangle;
 import java.awt.Toolkit;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -38,6 +39,7 @@ import iped.engine.data.IPEDSource;
 import iped.engine.data.ItemId;
 import iped.engine.task.index.IndexItem;
 import iped.properties.ExtraProperties;
+import iped.properties.MediaTypes;
 import iped.utils.IconUtil;
 import iped.viewers.HtmlLinkViewer;
 import iped.viewers.IcePDFViewer;
@@ -86,8 +88,8 @@ public class PinnedPreviewWindow extends JFrame {
     private MetadataViewer metadataViewer;
 
     private volatile boolean closed;
-    private volatile IItem item;
-    private volatile String contentType;
+    private volatile IItem item, viewItem;
+    private volatile String contentType, viewType;
     private volatile Set<String> highlights;
     private volatile IMultiBookmarks bookmarksListened;
 
@@ -141,19 +143,33 @@ public class PinnedPreviewWindow extends JFrame {
     public static void updateUIAll() {
         for (PinnedPreviewWindow window : openWindows) {
             SwingUtilities.updateComponentTreeUI(window);
+            window.reload();
         }
+    }
+
+    /**
+     * Loads the content again, e.g. to apply a new theme to HTML content. Must be
+     * called in the EDT.
+     */
+    private void reload() {
+        MetadataViewer metadata = metadataViewer;
+        loader.execute(() -> {
+            if (closed) {
+                return;
+            }
+            if (viewItem != null && viewType != null) {
+                preview.loadFile(viewItem, viewType, highlights);
+            }
+            if (metadata != null && item != null) {
+                metadata.loadFile(item, contentType, highlights);
+            }
+        });
     }
 
     private PinnedPreviewWindow(int luceneId) {
         this.luceneId = luceneId;
 
         linkViewer = ViewerController.addPreviewViewers(preview, this::showMetadata);
-        for (AbstractViewer viewer : preview.getViewerList()) {
-            if (viewer instanceof IcePDFViewer) {
-                // do not stop the rendering of PDFs shown in other windows
-                ((IcePDFViewer) viewer).setShutdownThreadPoolOnLoad(false);
-            }
-        }
         App app = App.get();
         app.getViewerController().configureImageViewers(preview);
         preview.setBlurFilter(app.galleryModel.getBlurFilter());
@@ -254,20 +270,24 @@ public class PinnedPreviewWindow extends JFrame {
 
     private void load() {
         try {
+            // first, so viewers are always initialized before being released by close()
+            preview.init();
+
             int luceneIdToShow = luceneId;
             Document doc = App.get().appCase.getSearcher().doc(luceneIdToShow);
             IPEDSource iCase = (IPEDSource) App.get().appCase.getAtomicSource(luceneIdToShow);
-            IItem item = IndexItem.getItem(doc, iCase, false);
-            itemsToDispose.add(item);
+            IItem item = getItem(doc, iCase, false);
             String contentType = item.getMediaType() != null ? item.getMediaType().toString() : null;
 
             FileProcessor.waitEvidenceOpening(item);
-            preview.init();
             Tika tika = getTika();
             IItem viewItem = getViewItem(item, doc, iCase);
             String viewType = contentType != null ? ViewerController.detectViewType(tika, item, viewItem, contentType) : null;
 
-            if ((viewType == null || !preview.isSupportedType(viewType, true)) && MenuClass.isChatMessage(item)) {
+            // UFED chat messages have their own preview, but the chat is more useful
+            boolean isUfedChatMessage = MediaTypes.UFED_MESSAGE_MIME.equals(item.getMediaType())
+                    && item.getMetadata().get(ExtraProperties.PARENT_VIEW_POSITION) != null;
+            if (MenuClass.isChatMessage(item) && (isUfedChatMessage || viewType == null || !preview.isSupportedType(viewType, true))) {
                 // show the parent chat scrolled to the message, as "go to parent chat"
                 IItemId itemId = App.get().appCase.getItemId(luceneIdToShow);
                 IIPEDSource atomicSource = App.get().appCase.getAtomicSourceBySourceId(itemId.getSourceId());
@@ -277,8 +297,7 @@ public class PinnedPreviewWindow extends JFrame {
                     luceneIdToShow = App.get().appCase.getLuceneId(new ItemId(itemId.getSourceId(), chatId));
                     doc = App.get().appCase.getSearcher().doc(luceneIdToShow);
                     iCase = (IPEDSource) App.get().appCase.getAtomicSource(luceneIdToShow);
-                    item = IndexItem.getItem(doc, iCase, false);
-                    itemsToDispose.add(item);
+                    item = getItem(doc, iCase, false);
                     contentType = item.getMediaType() != null ? item.getMediaType().toString() : null;
                     FileProcessor.waitEvidenceOpening(item);
                     viewItem = getViewItem(item, doc, iCase);
@@ -288,6 +307,8 @@ public class PinnedPreviewWindow extends JFrame {
 
             this.item = item;
             this.contentType = contentType;
+            this.viewItem = viewItem;
+            this.viewType = viewType;
             this.highlights = FileProcessor.getHighlightTerms(item);
             String name = item.getName();
             SwingUtilities.invokeLater(() -> setTitle(Messages.getString("PinnedPreview.Title", name)));
@@ -334,12 +355,19 @@ public class PinnedPreviewWindow extends JFrame {
         ((CardLayout) previewCards.getLayout()).show(previewCards, LOADING_CARD);
     }
 
-    private IItem getViewItem(IItem item, Document doc, IPEDSource iCase) {
+    private IItem getViewItem(IItem item, Document doc, IPEDSource iCase) throws IOException {
         if (item.getViewFile() != null || item.hasPreview()) {
-            IItem viewItem = IndexItem.getItem(doc, iCase, true);
-            itemsToDispose.add(viewItem);
-            return viewItem;
+            return getItem(doc, iCase, true);
         }
+        return item;
+    }
+
+    private IItem getItem(Document doc, IPEDSource iCase, boolean viewItem) throws IOException {
+        IItem item = IndexItem.getItem(doc, iCase, viewItem);
+        if (item == null) {
+            throw new IOException("Item not found: " + doc.get(IndexItem.PATH));
+        }
+        itemsToDispose.add(item);
         return item;
     }
 
@@ -401,12 +429,22 @@ public class PinnedPreviewWindow extends JFrame {
             if (metadata != null) {
                 metadata.loadFile(null);
             }
-            Runnable disposeViewers = () -> {
-                preview.dispose();
-                if (metadata != null) {
-                    metadata.dispose();
+            for (AbstractViewer viewer : preview.getViewerList()) {
+                if (viewer instanceof IcePDFViewer) {
+                    ((IcePDFViewer) viewer).waitPendingLoad();
                 }
-                dispose();
+            }
+            Runnable disposeViewers = () -> {
+                try {
+                    preview.dispose();
+                    if (metadata != null) {
+                        metadata.dispose();
+                    }
+                } catch (RuntimeException e) {
+                    LOGGER.warn("Error disposing pinned preview viewers", e);
+                } finally {
+                    dispose();
+                }
             };
             try {
                 // lets JavaFX finish pending tasks before disposing the Swing components

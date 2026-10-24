@@ -185,7 +185,9 @@ public class ResultTableListener implements ListSelectionListener, MouseListener
     private void showContextMenu(IItemId itemId, MouseEvent evt) {
         IItem item = itemId == null ? null : App.get().appCase.getItemByItemId(itemId);
 
-        if (evt.getButton() == MouseEvent.BUTTON3 && (evt.getModifiersEx() & MouseEvent.CTRL_DOWN_MASK) == MouseEvent.CTRL_DOWN_MASK) {
+        // the field value menu uses table coordinates, so it is not shown for the gallery
+        if (evt.getSource() == App.get().resultsTable && evt.getButton() == MouseEvent.BUTTON3
+                && (evt.getModifiersEx() & MouseEvent.CTRL_DOWN_MASK) == MouseEvent.CTRL_DOWN_MASK) {
             JTable resultsTable = App.get().resultsTable;
             int colIndex = resultsTable.columnAtPoint(evt.getPoint());
             int rowIndex = resultsTable.rowAtPoint(evt.getPoint());
