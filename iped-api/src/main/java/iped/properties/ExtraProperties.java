@@ -70,6 +70,14 @@ public class ExtraProperties {
      */
     public static final Property CONVERSATION_STORED_MESSAGES_COUNT = Property.internalInteger(CONVERSATION_PREFIX + "storedMessagesCount");
 
+    /**
+     * Gaps in the sequence numbers of the messages still stored for a
+     * conversation, suggesting deleted messages, as
+     * "firstMissing-lastMissing;recovered;dateBefore;dateAfter" (e.g. ZSORT of
+     * WhatsApp iOS ZWAMESSAGE).
+     */
+    public static final String CONVERSATION_SEQUENCE_GAPS = CONVERSATION_PREFIX + "sequenceGaps";
+
     public static final String CONVERSATION_SUFFIX_ID = ":id";
     public static final String CONVERSATION_SUFFIX_NAME = ":name";
     public static final String CONVERSATION_SUFFIX_PHONE = ":phoneNumber";

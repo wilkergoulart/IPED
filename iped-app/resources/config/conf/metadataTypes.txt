@@ -76,6 +76,7 @@ Conversation:Name = java.lang.String
 Conversation:messagesCount = java.lang.Integer
 Conversation:messageCounter = java.lang.Integer
 Conversation:storedMessagesCount = java.lang.Integer
+Conversation:sequenceGaps = java.lang.String
 Conversation:isOwnerAdmin = java.lang.Boolean
 Conversation:Account = java.lang.String
 Conversation:Account:id = java.lang.String

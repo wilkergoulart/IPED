@@ -278,6 +278,7 @@ public abstract class ExtractorIOS extends Extractor {
                 extractMessages(conn, idToChat, firstTry, false);
                 extractMessages(conn, idToChat, firstTry, true);
                 readMessageCounters(conn, idToChat);
+                readSequenceGaps(conn, idToChat, undeletedMessages);
 
                 for (Chat c : list) {
                     HashMap<String, Message> messagesMap = new HashMap<String, Message>();
@@ -370,6 +371,74 @@ public abstract class ExtractorIOS extends Extractor {
         } catch (SQLException e) {
             logger.warn("Error reading chat message counters from " + itemPath + ": " + e);
         }
+    }
+
+    /**
+     * Finds gaps in the ZSORT sequence of the messages still stored for each chat
+     * session, which suggest deleted messages, and how many of the missing ones
+     * were recovered from deleted records. Errors are only logged, as this is
+     * complementary data.
+     */
+    private void readSequenceGaps(Connection conn, Map<Long, Chat> idToChat,
+            Map<Long, List<SqliteRow>> undeletedMessages) {
+        // this may run again if the database is corrupted
+        idToChat.values().forEach(c -> c.getSequenceGaps().clear());
+        try (Statement stmt = conn.createStatement(); ResultSet rs = stmt.executeQuery(SELECT_MESSAGES_SORT)) {
+            long lastChatId = -1;
+            long lastSort = 0;
+            Date lastDate = null;
+            Set<Long> recoveredSorts = null;
+            while (rs.next()) {
+                long chatId = rs.getLong("chatId");
+                long sort = rs.getLong("sort");
+                double seconds = rs.getDouble("date");
+                Date date = rs.wasNull() ? null : new Date((long) ((seconds + 978307200) * 1000));
+                if (chatId != lastChatId) {
+                    lastChatId = chatId;
+                    recoveredSorts = null;
+                } else if (sort - lastSort > 1) {
+                    Chat c = idToChat.get(chatId);
+                    if (c != null) {
+                        if (recoveredSorts == null) {
+                            recoveredSorts = getRecoveredSorts(undeletedMessages.get(chatId));
+                        }
+                        int recovered = countInRange(recoveredSorts, lastSort + 1, sort - 1);
+                        c.getSequenceGaps()
+                                .add(new MessageSequenceGap(lastSort + 1, sort - 1, recovered, lastDate, date));
+                    }
+                }
+                lastSort = sort;
+                lastDate = date;
+            }
+        } catch (SQLException e) {
+            logger.warn("Error reading message sequence gaps from " + itemPath + ": " + e);
+        }
+    }
+
+    static int countInRange(Set<Long> values, long first, long last) {
+        int count = 0;
+        for (long v : values) {
+            if (v >= first && v <= last) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    static Set<Long> getRecoveredSorts(List<SqliteRow> rows) {
+        Set<Long> sorts = new HashSet<>();
+        if (rows != null) {
+            for (SqliteRow row : rows) {
+                if (row.isDeletedRow()) {
+                    try {
+                        sorts.add(row.getIntValue("ZSORT"));
+                    } catch (RuntimeException e) {
+                        // ignore invalid record
+                    }
+                }
+            }
+        }
+        return sorts;
     }
 
     private void extractMessages(Connection conn, Map<Long, Chat> idToChat, boolean firstTry, boolean isGroupChat)
@@ -1884,6 +1953,9 @@ public abstract class ExtractorIOS extends Extractor {
 
     private static final String SELECT_CHAT_MESSAGE_COUNTERS = "SELECT Z_PK as id, ZMESSAGECOUNTER as counter "
             + "FROM ZWACHATSESSION";
+
+    private static final String SELECT_MESSAGES_SORT = "SELECT ZCHATSESSION as chatId, ZSORT as sort, "
+            + "ZMESSAGEDATE as date FROM ZWAMESSAGE WHERE ZSORT IS NOT NULL ORDER BY ZCHATSESSION, ZSORT";
 
     private static final String SELECT_STORED_MESSAGES_COUNT = "SELECT ZCHATSESSION as id, COUNT(*) as total "
             + "FROM ZWAMESSAGE GROUP BY ZCHATSESSION";

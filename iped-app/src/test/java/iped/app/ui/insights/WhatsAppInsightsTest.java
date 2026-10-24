@@ -11,6 +11,9 @@ import java.util.List;
 
 import org.junit.Test;
 
+import iped.parsers.whatsapp.MessageSequenceGap;
+
+import iped.app.ui.insights.WhatsAppInsights.ChatGap;
 import iped.app.ui.insights.WhatsAppInsights.ChatStats;
 import iped.app.ui.insights.WhatsAppInsights.ParticipantStats;
 
@@ -23,11 +26,13 @@ public class WhatsAppInsightsTest {
     private WhatsAppInsights sample() {
         WhatsAppInsights insights = new WhatsAppInsights();
         // chat split in two fragments, both carrying the same counters
-        insights.addChat("0/10/1", "WhatsApp Chat - Ana", "/iPhone/ChatStorage.sqlite", 10, 4);
-        insights.addChat("0/10/1", "WhatsApp Chat - Ana", "/iPhone/ChatStorage.sqlite", 10, 4);
-        insights.addChat("0/10/2", "WhatsApp Chat - Bruno", "/iPhone/ChatStorage.sqlite", 3, 3);
+        insights.addChat("0/10/1", "WhatsApp Chat - Ana", "/iPhone/ChatStorage.sqlite", 10, 4, null);
+        insights.addChat("0/10/1", "WhatsApp Chat - Ana", "/iPhone/ChatStorage.sqlite", 10, 4, null);
+        insights.addChat("0/10/2", "WhatsApp Chat - Bruno", "/iPhone/ChatStorage.sqlite", 3, 3,
+                List.of(new MessageSequenceGap(5, 5, 0, date("2020-01-01T10:00:00Z"), date("2020-01-01T10:05:00Z")),
+                        new MessageSequenceGap(20, 29, 3, date("2021-06-01T08:00:00Z"), null)));
         // Android chat, without counter
-        insights.addChat("0/20/1", "WhatsApp Chat - Carla", "/Android/msgstore.db", null, null);
+        insights.addChat("0/20/1", "WhatsApp Chat - Carla", "/Android/msgstore.db", null, null, null);
 
         insights.addMessage("Ana", date("2021-12-31T23:59:59Z"), false);
         insights.addMessage("Ana", date("2022-03-01T10:00:00Z"), true);
@@ -87,7 +92,7 @@ public class WhatsAppInsightsTest {
     public void testHtml() {
         WhatsAppInsights insights = sample();
         insights.addMessage("<b>Eve</b>", date("2022-01-01T00:00:00Z"), false);
-        String html = insights.toHtml(key -> "[" + key + "]");
+        String html = insights.toHtml((key, args) -> "[" + key + "]");
         assertTrue(html.contains("[AnalystInsights.CounterTitle]"));
         assertTrue(html.contains("<td>WhatsApp Chat - Ana</td><td class=\"num\">10</td><td class=\"num\">4</td>"
                 + "<td class=\"num\">6</td>"));
@@ -100,16 +105,38 @@ public class WhatsAppInsightsTest {
 
     @Test
     public void testHtmlWithoutData() {
-        String html = new WhatsAppInsights().toHtml(key -> "[" + key + "]");
+        String html = new WhatsAppInsights().toHtml((key, args) -> "[" + key + "]");
         assertTrue(html.contains("[AnalystInsights.NoWhatsApp]"));
     }
 
     @Test
     public void testHtmlWithoutCounter() {
         WhatsAppInsights insights = new WhatsAppInsights();
-        insights.addChat("0/20/1", "WhatsApp Chat - Carla", "/Android/msgstore.db", null, null);
+        insights.addChat("0/20/1", "WhatsApp Chat - Carla", "/Android/msgstore.db", null, null, null);
         insights.addMessage("Carla", date("2023-01-01T00:00:00Z"), false);
-        String html = insights.toHtml(key -> "[" + key + "]");
+        String html = insights.toHtml((key, args) -> "[" + key + "]");
         assertTrue(html.contains("[AnalystInsights.CounterNotAvailable]"));
+    }
+
+    @Test
+    public void testSequenceGaps() {
+        List<ChatGap> gaps = sample().getSequenceGaps();
+        assertEquals(2, gaps.size());
+        assertEquals(10, gaps.get(0).getGap().getMissing());
+        assertEquals("WhatsApp Chat - Bruno", gaps.get(0).getChat().getName());
+        assertEquals(1, gaps.get(1).getGap().getMissing());
+
+        String html = sample().toHtml((key, args) -> "[" + key + "]");
+        assertTrue(html.contains("[AnalystInsights.GapsTitle]"));
+        assertTrue(html.contains("<td class=\"num\">10</td><td class=\"nowrap\">20 - 29</td><td class=\"num\">3</td>"));
+        assertTrue(html.contains("2020-01-01 10:05:00"));
+        assertFalse(html.contains("[AnalystInsights.GapsNotFound]"));
+    }
+
+    @Test
+    public void testNoSequenceGaps() {
+        WhatsAppInsights insights = new WhatsAppInsights();
+        insights.addChat("0/20/1", "WhatsApp Chat - Carla", "/Android/msgstore.db", null, null, null);
+        assertTrue(insights.toHtml((key, args) -> "[" + key + "]").contains("[AnalystInsights.GapsNotFound]"));
     }
 }

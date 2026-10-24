@@ -8,7 +8,9 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 import java.util.regex.Pattern;
 
@@ -25,8 +27,10 @@ import iped.app.ui.App;
 import iped.app.ui.ExternalFileOpen;
 import iped.app.ui.Messages;
 import iped.data.IItemId;
+import iped.engine.localization.CategoryLocalization;
 import iped.engine.search.IPEDSearcher;
 import iped.engine.search.MultiSearchResult;
+import iped.parsers.whatsapp.MessageSequenceGap;
 import iped.parsers.whatsapp.WhatsAppParser;
 import iped.properties.BasicProps;
 import iped.properties.ExtraProperties;
@@ -36,7 +40,8 @@ import iped.viewers.util.ProgressDialog;
 
 /**
  * Generates an HTML report with insights about the case data to help the
- * analyst. It currently covers WhatsApp chats and messages.
+ * analyst: WhatsApp chats and messages statistics and areas with most
+ * geolocated items.
  */
 public class AnalystInsightsReport extends CancelableWorker<File, Void> implements PropertyChangeListener {
 
@@ -54,10 +59,24 @@ public class AnalystInsightsReport extends CancelableWorker<File, Void> implemen
 
     private static final Set<String> CHAT_FIELDS = Set.of(BasicProps.NAME, BasicProps.PATH, BasicProps.PARENTID,
             "chatId", ExtraProperties.CONVERSATION_MESSAGE_COUNTER.getName(),
-            ExtraProperties.CONVERSATION_STORED_MESSAGES_COUNT.getName());
+            ExtraProperties.CONVERSATION_STORED_MESSAGES_COUNT.getName(), ExtraProperties.CONVERSATION_SEQUENCE_GAPS);
 
     private static final Set<String> MESSAGE_FIELDS = Set.of(ExtraProperties.COMMUNICATION_FROM,
             ExtraProperties.MESSAGE_DATE.getName(), BasicProps.DELETED);
+
+    private static final String GEO_QUERY = ExtraProperties.LOCATIONS.replace(":", "\\:") + ":*";
+
+    // date of a geolocated item: message date, then creation date from metadata
+    // (e.g. EXIF of photos), then file system creation date
+    private static final String[] GEO_DATE_FIELDS = { ExtraProperties.MESSAGE_DATE.getName(),
+            ExtraProperties.COMMON_META_PREFIX + "dcterms:created", BasicProps.CREATED };
+
+    private static final Set<String> GEO_FIELDS = Set.of(ExtraProperties.LOCATIONS, BasicProps.CATEGORY,
+            GEO_DATE_FIELDS[0], GEO_DATE_FIELDS[1], GEO_DATE_FIELDS[2]);
+
+    static final double GEO_RADIUS = 30;
+    static final int MAX_HOTSPOTS = 20;
+    static final int MIN_HOTSPOT_RECORDS = 2;
 
     private ProgressDialog progressDialog;
     private File file;
@@ -97,7 +116,8 @@ public class AnalystInsightsReport extends CancelableWorker<File, Void> implemen
                     + chatName;
             whatsApp.addChat(key, chatName, database,
                     getInt(doc, ExtraProperties.CONVERSATION_MESSAGE_COUNTER.getName()),
-                    getInt(doc, ExtraProperties.CONVERSATION_STORED_MESSAGES_COUNT.getName()));
+                    getInt(doc, ExtraProperties.CONVERSATION_STORED_MESSAGES_COUNT.getName()),
+                    parseGaps(doc.getValues(ExtraProperties.CONVERSATION_SEQUENCE_GAPS)));
         }
 
         MultiSearchResult messages = search(MESSAGES_QUERY);
@@ -112,10 +132,35 @@ public class AnalystInsightsReport extends CancelableWorker<File, Void> implemen
             }
         }
 
+        GeoHotspots geo = new GeoHotspots(GEO_RADIUS);
+        MultiSearchResult geoItems = search(GEO_QUERY);
+        for (int i = 0; i < geoItems.getLength() && !isCancelled(); i++) {
+            IItemId itemId = geoItems.getItem(i);
+            Document doc = getDocument(itemId, GEO_FIELDS);
+            String category = doc.get(BasicProps.CATEGORY);
+            if (category != null) {
+                category = CategoryLocalization.getInstance().getLocalizedCategory(category.trim());
+            }
+            Date date = null;
+            for (String field : GEO_DATE_FIELDS) {
+                if ((date = parseDate(doc.get(field))) != null) {
+                    break;
+                }
+            }
+            String item = itemId.getSourceId() + "_" + itemId.getId();
+            for (String location : doc.getValues(ExtraProperties.LOCATIONS)) {
+                geo.add(location, item, category, date);
+            }
+            if ((i + 1) % 10000 == 0) {
+                firePropertyChange("note", null,
+                        Messages.getString("AnalystInsights.ReadingGeo", i + 1, geoItems.getLength()));
+            }
+        }
+
         if (isCancelled()) {
             return null;
         }
-        Files.writeString(file.toPath(), toHtml(whatsApp), StandardCharsets.UTF_8);
+        Files.writeString(file.toPath(), toHtml(whatsApp, geo), StandardCharsets.UTF_8);
         return file;
     }
 
@@ -145,6 +190,17 @@ public class AnalystInsightsReport extends CancelableWorker<File, Void> implemen
         }
     }
 
+    private static List<MessageSequenceGap> parseGaps(String[] values) {
+        List<MessageSequenceGap> gaps = new ArrayList<>();
+        for (String value : values) {
+            MessageSequenceGap gap = MessageSequenceGap.parse(value);
+            if (gap != null) {
+                gaps.add(gap);
+            }
+        }
+        return gaps;
+    }
+
     private static Date parseDate(String value) {
         if (value == null || value.isBlank()) {
             return null;
@@ -156,7 +212,7 @@ public class AnalystInsightsReport extends CancelableWorker<File, Void> implemen
         }
     }
 
-    private static String toHtml(WhatsAppInsights whatsApp) {
+    private static String toHtml(WhatsAppInsights whatsApp, GeoHotspots geo) {
         SimpleDateFormat df = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss z");
         String title = WhatsAppInsights.escape(Messages.getString("AnalystInsights.Title"));
         StringBuilder sb = new StringBuilder();
@@ -175,6 +231,7 @@ public class AnalystInsightsReport extends CancelableWorker<File, Void> implemen
                 .append("<br>").append(WhatsAppInsights.escape(Messages.getString("AnalystInsights.DatesInUtc")))
                 .append("</p>\n");
         sb.append(whatsApp.toHtml(Messages::getString));
+        sb.append(geo.toHtml(geo.find(MAX_HOTSPOTS, MIN_HOTSPOT_RECORDS), MAX_HOTSPOTS, Messages::getString));
         sb.append("</body>\n</html>\n");
         return sb.toString();
     }

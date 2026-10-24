@@ -25,6 +25,7 @@ public class Chat {
 
     private Integer messageCounter;
     private Integer storedMessagesCount;
+    private List<MessageSequenceGap> sequenceGaps = new ArrayList<>();
 
     private Set<WAContact> groupMembers = new HashSet<>();
 
@@ -197,5 +198,13 @@ public class Chat {
 
     public void setStoredMessagesCount(Integer storedMessagesCount) {
         this.storedMessagesCount = storedMessagesCount;
+    }
+
+    /**
+     * @return gaps in the sequence numbers of the messages still stored for this
+     *         chat
+     */
+    public List<MessageSequenceGap> getSequenceGaps() {
+        return sequenceGaps;
     }
 }
